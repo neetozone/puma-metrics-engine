@@ -57,7 +57,7 @@ module PumaMetricsEngine
 
       def extract_request_start_time(env)
         # Try X-Request-Start header (common in nginx, HAProxy, etc.)
-        # Format: "t=1234567890.123" or "1234567890.123" or Unix timestamp in microseconds
+        # Format: "t=1234567890.123" or "1234567890.123" or Unix timestamp in milliseconds/microseconds
         header_value = env["HTTP_X_REQUEST_START"] || env["X-Request-Start"]
 
         return nil unless header_value
@@ -75,10 +75,25 @@ module PumaMetricsEngine
 
         timestamp = timestamp_str.to_f
 
-        # If timestamp is in microseconds (common with nginx), convert to seconds
-        # Timestamps > year 2100 are likely in microseconds
+        # Detect timestamp format based on magnitude:
+        # - 10 digits or less: seconds (e.g., 1764410986)
+        # - 11-13 digits: milliseconds (e.g., 1764410986245)
+        # - 14+ digits: microseconds (e.g., 1764410986245000)
         if timestamp > 4_102_444_800 # Year 2100 in seconds
-          timestamp = timestamp / 1_000_000.0
+          # Count digits in integer part to determine format
+          integer_part = timestamp.to_i.to_s
+          digit_count = integer_part.length
+
+          if digit_count <= 10
+            # Already in seconds
+            timestamp
+          elsif digit_count <= 13
+            # Milliseconds - convert to seconds
+            timestamp = timestamp / 1_000.0
+          else
+            # Microseconds - convert to seconds
+            timestamp = timestamp / 1_000_000.0
+          end
         end
 
         timestamp
