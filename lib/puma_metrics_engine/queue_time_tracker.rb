@@ -14,6 +14,13 @@ module PumaMetricsEngine
       request_start_time = extract_request_start_time(env)
       process_start_time = Time.now.to_f
 
+      # Log header presence for debugging
+      if defined?(Rails)
+        header_value = env["HTTP_X_REQUEST_START"] || env["X-Request-Start"]
+        Rails.logger.debug("[QueueTimeTracker] X-Request-Start header: #{header_value.inspect}") if header_value
+        Rails.logger.debug("[QueueTimeTracker] No X-Request-Start header found") unless header_value
+      end
+
       status, headers, response = @app.call(env)
 
       # Calculate queue time if we have request start time
@@ -27,8 +34,10 @@ module PumaMetricsEngine
             timestamp = process_start_time
             # Store in Redis asynchronously to avoid blocking the request
             store_metrics_async(timestamp, queue_time_ms)
+            Rails.logger.debug("[QueueTimeTracker] Stored queue time: #{queue_time_ms}ms") if defined?(Rails)
           else
             # Still track request timestamp even if queue time is invalid
+            Rails.logger.warn("[QueueTimeTracker] Invalid queue time: #{queue_time_ms}ms (rejected)") if defined?(Rails)
             store_request_timestamp_async(process_start_time)
           end
         else
@@ -37,7 +46,8 @@ module PumaMetricsEngine
         end
       rescue StandardError => e
         # Don't let tracking errors break the request
-        Rails.logger.error("QueueTimeTracker error: #{e.message}") if defined?(Rails)
+        Rails.logger.error("[QueueTimeTracker] Error: #{e.message}") if defined?(Rails)
+        Rails.logger.error("[QueueTimeTracker] Backtrace: #{e.backtrace.first(5).join("\n")}") if defined?(Rails)
       end
 
       [status, headers, response]
@@ -89,7 +99,8 @@ module PumaMetricsEngine
             # Cleanup old data (older than TTL)
             cleanup_old_data(redis_client)
           rescue StandardError => e
-            Rails.logger.error("Failed to store queue time metrics: #{e.message}") if defined?(Rails)
+            Rails.logger.error("[QueueTimeTracker] Failed to store metrics: #{e.message}") if defined?(Rails)
+            Rails.logger.error("[QueueTimeTracker] Redis error backtrace: #{e.backtrace.first(3).join("\n")}") if defined?(Rails)
           end
         end
       end
@@ -101,7 +112,7 @@ module PumaMetricsEngine
             redis_client.zadd(REQUESTS_KEY, timestamp, timestamp)
             cleanup_old_data(redis_client)
           rescue StandardError => e
-            Rails.logger.error("Failed to store request timestamp: #{e.message}") if defined?(Rails)
+            Rails.logger.error("[QueueTimeTracker] Failed to store request timestamp: #{e.message}") if defined?(Rails)
           end
         end
       end
