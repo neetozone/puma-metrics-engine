@@ -3,6 +3,8 @@
 require "rails_helper"
 
 RSpec.describe PumaMetricsEngine::MatrixController, type: :controller do
+  routes { PumaMetricsEngine::Engine.routes }
+
   let(:redis) { Redis.new(url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" }) }
 
   before do
@@ -200,6 +202,8 @@ RSpec.describe PumaMetricsEngine::MatrixController, type: :controller do
     context "when Redis connection fails" do
       before do
         allow_any_instance_of(Redis).to receive(:zrange).and_raise(Redis::BaseError.new("Connection failed"))
+        allow_any_instance_of(Redis).to receive(:zrangebyscore).and_raise(Redis::BaseError.new("Connection failed"))
+        allow_any_instance_of(Redis).to receive(:zcount).and_raise(Redis::BaseError.new("Connection failed"))
       end
 
       it "returns error for queue time" do
@@ -248,8 +252,8 @@ RSpec.describe PumaMetricsEngine::MatrixController, type: :controller do
         get :show
 
         json = JSON.parse(response.body)
-        # p50 should be the median (average of 50 and 60)
-        expect(json["queue_time_ms"]["p50"]).to eq(55.0)
+        # p50 uses nearest-rank: ceil(0.5 * 10) - 1 = index 4 → value 50
+        expect(json["queue_time_ms"]["p50"]).to eq(50.0)
       end
 
       it "calculates p95 correctly" do

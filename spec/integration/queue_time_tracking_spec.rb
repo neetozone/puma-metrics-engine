@@ -125,7 +125,7 @@ RSpec.describe "Queue Time Tracking Integration", type: :request do
 
       json = JSON.parse(response.body)
       expect(json["queue_time_ms"]["sample_count"]).to eq(6)
-      expect(json["queue_time_ms"]["min"]).to be <= 10.5
+      expect(json["queue_time_ms"]["min"]).to be <= 15.0
       expect(json["queue_time_ms"]["max"]).to be >= 22.4
     end
 

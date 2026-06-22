@@ -1,11 +1,11 @@
 # frozen_string_literal: true
 
-require "spec_helper"
-
 ENV["RAILS_ENV"] ||= "test"
 
-# Load Rails and the engine
+# Load Rails and the engine before spec_helper so the engine constant is available
 require File.expand_path("../dummy/config/environment", __FILE__)
+
+require "spec_helper"
 
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 

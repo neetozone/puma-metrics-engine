@@ -37,11 +37,10 @@ Gem::Specification.new do |spec|
   spec.add_dependency "rails", ">= 7.0"
   spec.add_dependency "redis", ">= 5.0"
 
-  spec.add_development_dependency "bundler", "~> 2.0"
+  spec.add_development_dependency "bundler", ">= 2.0"
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec-rails", "~> 6.0"
   spec.add_development_dependency "rspec-mocks", "~> 3.12"
-  spec.add_development_dependency "fakeredis", "~> 0.9"
   spec.add_development_dependency "timecop", "~> 0.9"
   spec.add_development_dependency "webmock", "~> 3.18"
 end

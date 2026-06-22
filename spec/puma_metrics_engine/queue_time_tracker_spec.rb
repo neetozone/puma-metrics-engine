@@ -206,6 +206,20 @@ RSpec.describe PumaMetricsEngine::QueueTimeTracker do
           middleware.call(env)
         end.to raise_error(StandardError, "App error")
       end
+
+      it "still stores queue time even when app raises (e.g. Rack::Timeout)" do
+        failing_app = ->(_env) { raise StandardError, "Request timed out" }
+        middleware = described_class.new(failing_app)
+        request_time = Time.now.to_f - 0.025
+        env = base_env.merge("HTTP_X_REQUEST_START" => "t=#{request_time}")
+
+        expect { middleware.call(env) }.to raise_error(StandardError)
+
+        sleep(0.1)
+
+        queue_times = redis.zrange(PumaMetricsEngine::QueueTimeTracker::QUEUE_TIMES_KEY, 0, -1)
+        expect(queue_times).not_to be_empty
+      end
     end
   end
 

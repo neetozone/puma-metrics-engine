@@ -14,43 +14,33 @@ module PumaMetricsEngine
       request_start_time = extract_request_start_time(env)
       process_start_time = Time.now.to_f
 
-      # Log header presence for debugging
       if defined?(Rails)
         header_value = env["HTTP_X_REQUEST_START"] || env["X-Request-Start"]
         Rails.logger.debug("[QueueTimeTracker] X-Request-Start header: #{header_value.inspect}") if header_value
         Rails.logger.debug("[QueueTimeTracker] No X-Request-Start header found") unless header_value
       end
 
-      status, headers, response = @app.call(env)
+      # Calculate queue time before calling the app so it's captured even if the app raises
+      # (e.g. Rack::Timeout::RequestTimeoutException). Without this, timed-out requests
+      # never contribute to queue time metrics, making autoscale blind to saturation.
+      queue_time_ms = if request_start_time
+        raw = ((process_start_time - request_start_time) * 1000).round(2)
+        raw >= 0 && raw < 3_600_000 ? raw : nil
+      end
 
-      # Calculate queue time if we have request start time
+      @app.call(env)
+    ensure
       begin
-        if request_start_time
-          queue_time_ms = ((process_start_time - request_start_time) * 1000).round(2)
-          
-          # Only store if queue time is reasonable (positive and less than 1 hour)
-          # Negative values indicate clock skew, very large values are likely errors
-          if queue_time_ms >= 0 && queue_time_ms < 3_600_000
-            timestamp = process_start_time
-            # Store in Redis asynchronously to avoid blocking the request
-            store_metrics_async(timestamp, queue_time_ms)
-            Rails.logger.debug("[QueueTimeTracker] Stored queue time: #{queue_time_ms}ms") if defined?(Rails)
-          else
-            # Still track request timestamp even if queue time is invalid
-            Rails.logger.warn("[QueueTimeTracker] Invalid queue time: #{queue_time_ms}ms (rejected)") if defined?(Rails)
-            store_request_timestamp_async(process_start_time)
-          end
+        if queue_time_ms
+          store_metrics_async(process_start_time, queue_time_ms)
+          Rails.logger.debug("[QueueTimeTracker] Stored queue time: #{queue_time_ms}ms") if defined?(Rails)
         else
-          # Still track request timestamp even without queue time
+          Rails.logger.warn("[QueueTimeTracker] Invalid or missing queue time (rejected)") if defined?(Rails) && request_start_time
           store_request_timestamp_async(process_start_time)
         end
       rescue StandardError => e
-        # Don't let tracking errors break the request
-        Rails.logger.error("[QueueTimeTracker] Error: #{e.message}") if defined?(Rails)
-        Rails.logger.error("[QueueTimeTracker] Backtrace: #{e.backtrace.first(5).join("\n")}") if defined?(Rails)
+        Rails.logger.error("[QueueTimeTracker] Error storing metrics: #{e.message}") if defined?(Rails)
       end
-
-      [status, headers, response]
     end
 
     private

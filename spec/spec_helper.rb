@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 require "bundler/setup"
-require "puma_metrics_engine"
-require "fakeredis/rspec"
 require "timecop"
+require "redis"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
