@@ -5,12 +5,12 @@ require_relative "lib/puma_metrics_engine/version"
 Gem::Specification.new do |spec|
   spec.name          = "puma_metrics_engine"
   spec.version       = PumaMetricsEngine::VERSION
-  spec.authors       = ["Neeto"]
-  spec.email         = ["engineering@bigbinary.com"]
+  spec.authors       = ["Neeraj Singh"]
+  spec.email         = ["neeraj@neeto.com"]
 
   spec.summary       = "Rails engine that provides a /matrix endpoint for Puma metrics and queue time statistics"
   spec.description   = "A Rails engine that exposes Puma server metrics, queue time statistics, and request rate information via a /matrix endpoint"
-  spec.homepage      = "https://github.com/bigbinary/puma_metrics_engine"
+  spec.homepage      = "https://github.com/neetozone/puma_metrics_engine"
   spec.license       = "MIT"
 
   spec.metadata["homepage_uri"] = spec.homepage
