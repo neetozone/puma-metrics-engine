@@ -1,6 +1,7 @@
 # PumaMetricsEngine
 
-A Rails engine that provides a `/matrix` endpoint for Puma metrics and queue time statistics.
+A Rails engine that provides a `/matrix` endpoint for Puma metrics and queue
+time statistics.
 
 ## Installation
 
@@ -59,9 +60,11 @@ For debugging production issues, use `/debug` endpoint to check:
 
 - **Rails** >= 7.0
 - **Redis** >= 5.0
-- **X-Request-Start header**: Set by your load balancer (nginx, HAProxy, etc.) for queue time tracking
+- **X-Request-Start header**: Set by your load balancer (nginx, HAProxy, etc.)
+  for queue time tracking
 
-Redis connection uses `ENV["REDIS_URL"]` or defaults to `redis://localhost:6379/1`.
+Redis connection uses `ENV["REDIS_URL"]` or defaults to
+`redis://localhost:6379/1`.
 
 ## License
 
