@@ -8,6 +8,12 @@ module PumaMetricsEngine
 
     def initialize(app)
       @app = app
+      @writer = Writer.new(
+        queue_times_key: QUEUE_TIMES_KEY,
+        requests_key: REQUESTS_KEY,
+        redis_url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" },
+        after_write: method(:cleanup_old_data)
+      )
     end
 
     def call(env)
@@ -102,34 +108,11 @@ module PumaMetricsEngine
       end
 
       def store_metrics_async(timestamp, queue_time_ms)
-        # Use a thread pool or async job, but for simplicity, we'll do it synchronously
-        # In production, you might want to use a background job
-        Thread.new do
-          begin
-            redis_client = redis
-            # Store queue time with timestamp as score
-            redis_client.zadd(QUEUE_TIMES_KEY, timestamp, queue_time_ms)
-            # Store request timestamp
-            redis_client.zadd(REQUESTS_KEY, timestamp, timestamp)
-            # Cleanup old data (older than TTL)
-            cleanup_old_data(redis_client)
-          rescue StandardError => e
-            Rails.logger.error("[QueueTimeTracker] Failed to store metrics: #{e.message}") if defined?(Rails)
-            Rails.logger.error("[QueueTimeTracker] Redis error backtrace: #{e.backtrace.first(3).join("\n")}") if defined?(Rails)
-          end
-        end
+        @writer.record(timestamp, queue_time_ms)
       end
 
       def store_request_timestamp_async(timestamp)
-        Thread.new do
-          begin
-            redis_client = redis
-            redis_client.zadd(REQUESTS_KEY, timestamp, timestamp)
-            cleanup_old_data(redis_client)
-          rescue StandardError => e
-            Rails.logger.error("[QueueTimeTracker] Failed to store request timestamp: #{e.message}") if defined?(Rails)
-          end
-        end
+        @writer.record(timestamp, nil)
       end
 
       def cleanup_old_data(redis_client)
@@ -140,10 +123,6 @@ module PumaMetricsEngine
         # Remove old entries from both sorted sets
         redis_client.zremrangebyscore(QUEUE_TIMES_KEY, "-inf", cutoff_time)
         redis_client.zremrangebyscore(REQUESTS_KEY, "-inf", cutoff_time)
-      end
-
-      def redis
-        @redis ||= Redis.new(url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" })
       end
   end
 end
