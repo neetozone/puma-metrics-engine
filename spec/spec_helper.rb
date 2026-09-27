@@ -2,7 +2,6 @@
 
 require "bundler/setup"
 require "puma_metrics_engine"
-require "fakeredis/rspec"
 require "timecop"
 
 RSpec.configure do |config|
