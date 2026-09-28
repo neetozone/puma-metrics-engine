@@ -326,5 +326,46 @@ RSpec.describe PumaMetricsEngine::QueueTimeTracker do
       expect(request_timestamps.size).to eq(3)
     end
   end
-end
 
+  describe "storing every request" do
+    let(:queue_times_key) { PumaMetricsEngine::QueueTimeTracker::QUEUE_TIMES_KEY }
+    let(:requests_key) { PumaMetricsEngine::QueueTimeTracker::REQUESTS_KEY }
+
+    # Sorted-set members are unique. Storing the queue time as the member made
+    # identical values overwrite each other, so common fast values were lost.
+    it "keeps one queue time entry per request even when the values are equal" do
+      Timecop.freeze(Time.at(1_800_000_000.5)) do
+        env = base_env.merge("HTTP_X_REQUEST_START" => "t=1800000000.45")
+        3.times { middleware.call(env) }
+      end
+      sleep(0.1)
+
+      queue_times = redis.zrange(queue_times_key, 0, -1)
+      expect(queue_times.size).to eq(3)
+      expect(queue_times.map(&:to_f)).to all(be_within(0.01).of(50.0))
+    end
+
+    it "counts every request even when two share a timestamp" do
+      Timecop.freeze(Time.at(1_800_000_000.5)) do
+        2.times { middleware.call(base_env) }
+      end
+      sleep(0.1)
+
+      expect(redis.zcard(requests_key)).to eq(2)
+    end
+
+    it "does not start a thread for each request" do
+      middleware.call(base_env) # let the writer start
+      sleep(0.05)
+
+      expect(Thread).not_to receive(:new)
+      5.times do
+        env = base_env.merge("HTTP_X_REQUEST_START" => "t=#{Time.now.to_f - 0.01}")
+        middleware.call(env)
+      end
+      sleep(0.1)
+
+      expect(redis.zcard(requests_key)).to eq(6)
+    end
+  end
+end
