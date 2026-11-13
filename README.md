@@ -25,11 +25,7 @@ end
 
 Access metrics at `/matrix` endpoint.
 
-For debugging production issues, use `/debug` endpoint to check:
-- Middleware registration status
-- Redis connectivity
-- Header presence
-- Current data in Redis
+For debugging production issues, see [DEBUGGING.md](DEBUGGING.md).
 
 ## Response Format
 

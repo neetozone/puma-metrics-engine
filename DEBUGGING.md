@@ -1,65 +1,35 @@
 # Debugging Production Issues
 
-If you're not seeing queue time data in production, use the `/debug` endpoint to diagnose the issue.
+If you're not seeing queue time data in production, run these checks in a Rails console on the app.
 
 ## Quick Debug Steps
 
-1. **Access the debug endpoint**: `GET /your-mount-path/debug`
-
-2. **Check the response** for these key indicators:
-
 ### Middleware Status
-```json
-{
-  "middleware": {
-    "registered": true/false,
-    "middleware_stack": [...],
-    "note": "..."
-  }
-}
+```ruby
+Rails.application.middleware.to_a.map(&:klass).map(&:name).include?("PumaMetricsEngine::QueueTimeTracker")
 ```
-- If `registered: false`, the middleware isn't being loaded. Check that the engine is properly mounted.
+- If `false`, the middleware isn't being loaded. Check that the engine is properly mounted.
 
 ### Redis Status
-```json
-{
-  "redis": {
-    "connected": true/false,
-    "url": "redis://...",
-    "keys": {
-      "queue_times": true/false,
-      "request_timestamps": true/false
-    }
-  }
-}
+```ruby
+redis = Redis.new(url: ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" })
+redis.ping
+redis.exists?(PumaMetricsEngine::MatrixController::QUEUE_TIMES_KEY)
+redis.exists?(PumaMetricsEngine::MatrixController::REQUESTS_KEY)
 ```
-- If `connected: false`, check your `REDIS_URL` environment variable.
+- If `ping` raises, check your `REDIS_URL` environment variable.
 - If keys don't exist, no data has been stored yet.
 
 ### Headers
-```json
-{
-  "headers": {
-    "x_request_start": "...",
-    "http_x_request_start": "...",
-    "all_x_headers": {...},
-    "note": "Check if X-Request-Start header is being sent by your load balancer"
-  }
-}
-```
-- If both header fields are `null`, your load balancer isn't sending the `X-Request-Start` header.
+- Check the Rails logs for `[QueueTimeTracker] No X-Request-Start header found` (logged at `debug` level; see Logging below).
+- If it appears on every request, your load balancer isn't sending the `X-Request-Start` header.
 - This is the most common issue!
 
 ### Data Summary
-```json
-{
-  "data": {
-    "queue_times_count": 0,
-    "request_timestamps_count": 0,
-    "recent_queue_times": [],
-    "recent_timestamps": []
-  }
-}
+```ruby
+redis.zcard(PumaMetricsEngine::MatrixController::QUEUE_TIMES_KEY)
+redis.zcard(PumaMetricsEngine::MatrixController::REQUESTS_KEY)
+redis.zrange(PumaMetricsEngine::MatrixController::QUEUE_TIMES_KEY, -10, -1)
 ```
 - If counts are 0, no data is being stored.
 - Check middleware status and headers above.
@@ -68,7 +38,7 @@ If you're not seeing queue time data in production, use the `/debug` endpoint to
 
 ### 1. Missing X-Request-Start Header
 
-**Symptom**: `headers.x_request_start` and `headers.http_x_request_start` are both `null`
+**Symptom**: Logs show `[QueueTimeTracker] No X-Request-Start header found` on every request
 
 **Solution**: Configure your load balancer to send the header:
 
@@ -83,7 +53,7 @@ proxy_set_header X-Request-Start "t=${msec}";
 
 ### 2. Middleware Not Registered
 
-**Symptom**: `middleware.registered: false`
+**Symptom**: The middleware check above returns `false`
 
 **Solution**: 
 - Ensure the engine is mounted in your routes
@@ -92,7 +62,7 @@ proxy_set_header X-Request-Start "t=${msec}";
 
 ### 3. Redis Connection Issues
 
-**Symptom**: `redis.connected: false`
+**Symptom**: `redis.ping` raises an error
 
 **Solution**:
 - Verify `REDIS_URL` environment variable is set correctly
@@ -131,12 +101,7 @@ curl -H "X-Request-Start: t=$(ruby -e 'puts Time.now.to_f')" http://localhost:30
 
 2. Wait a moment for async processing
 
-3. Check the debug endpoint:
-```bash
-curl http://localhost:3000/your-mount-path/debug
-```
-
-4. Check the matrix endpoint:
+3. Check the matrix endpoint:
 ```bash
 curl http://localhost:3000/your-mount-path/matrix
 ```
